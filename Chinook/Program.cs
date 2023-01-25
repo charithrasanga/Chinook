@@ -1,6 +1,8 @@
 using Chinook;
 using Chinook.Areas.Identity;
+using Chinook.Extentions;
 using Chinook.Models;
+using Chinook.Repositories.RepositoryWrapper;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +14,8 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddDefaultIdentity<ChinookUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ChinookContext>();
+
+builder.Services.ConfigureRepositoryWrapper();
 
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
