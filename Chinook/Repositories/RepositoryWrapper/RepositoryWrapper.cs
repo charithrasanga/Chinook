@@ -7,58 +7,73 @@ namespace Chinook.Repositories.RepositoryWrapper
     {
         private ChinookContext _context;
 
-        private IPlaylistRepository playlists;
+        private IPlaylistRepository _playlists;
         public IPlaylistRepository Playlists
         {
             get
             {
-                if (playlists == null)
+                if (_playlists == null)
                 {
-                    playlists = new PlaylistRepository(_context);
+                    _playlists = new PlaylistRepository(_context);
                 }
-                return playlists;
+                return _playlists;
             }
         }
 
 
-        private IArtistRepository artists;
+        private IArtistRepository _artists;
         public IArtistRepository Artists
         {
             get
             {
-                if (artists == null)
+                if (_artists == null)
                 {
-                    artists = new ArtistRepository(_context);
+                    _artists = new ArtistRepository(_context);
                 }
-                return artists;
+                return _artists;
             }
         }
 
-        private IAlbumRepository albums;
+        private IAlbumRepository _albums;
         public IAlbumRepository Albums
         {
             get
             {
-                if (albums == null)
+                if (_albums == null)
                 {
-                    albums = new AlbumRepository(_context);
+                    _albums = new AlbumRepository(_context);
                 }
-                return albums;
+                return _albums;
             }
         }
 
-        private ITrackRepository tracks;
+        private ITrackRepository _tracks;
         public ITrackRepository Tracks
         {
             get
             {
-                if (tracks == null)
+                if (_tracks == null)
                 {
-                    tracks = new TrackRepository(_context);
+                    _tracks = new TrackRepository(_context);
                 }
-                return tracks;
+                return _tracks;
             }
         }
+
+      
+        private IUserPlaylistRepository _userPlaylists;
+        public IUserPlaylistRepository UserPlaylists
+        {
+            get
+            {
+                if (_userPlaylists == null)
+                {
+                    _userPlaylists = new UserPlaylistRepository(_context);
+                }
+                return _userPlaylists;
+            }
+        }
+
         public RepositoryWrapper(ChinookContext Context)
         {
             _context = Context;
@@ -67,6 +82,8 @@ namespace Chinook.Repositories.RepositoryWrapper
         public void Save()
         {
             _context.SaveChanges();
+            _context.ChangeTracker.Clear();
+
         }
     }
 }

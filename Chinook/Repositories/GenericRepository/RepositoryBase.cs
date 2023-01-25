@@ -27,6 +27,7 @@ namespace Chinook.Repositories.GenericRepository
 
         public void Update(T entity)
         {
+            
             _dbContext.Set<T>().Update(entity);
         }
 
