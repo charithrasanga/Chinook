@@ -6,7 +6,7 @@
         IArtistRepository Artists { get; }
         IAlbumRepository Albums { get; }
         ITrackRepository Tracks { get; }
-
+        IUserPlaylistRepository UserPlaylists { get; }
         void Save();
     }
 }
