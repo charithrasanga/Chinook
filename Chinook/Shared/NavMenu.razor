@@ -20,17 +20,30 @@
                 <i class="bi bi-music-note-list me-3" style="font-size: 1.25em"></i>My favorite tracks
             </NavLink>
         </div>
-        @if (playlist is not null)
+        <NavLink class="nav-link" @onclick="()=>expandSubNav = !expandSubNav">
+            <span class="oi oi-list-rich" aria-hidden="true"></span> My Playlists
+        </NavLink>
+        @if (expandSubNav)
         {
-            @foreach (var item in playlist)
+           @* <NavLink class="expand-menu" href="">
+                <span>Sub1</span>
+            </NavLink>
+            <NavLink class="" href="">
+                <span>Sub2</span>
+            </NavLink>*@
+            @if (playlist is not null)
             {
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="@("/playlist/"+item.PlaylistId)">
-                        <i class="bi bi-box2-heart me-3" style="font-size: 1.25em"></i>@item.Name
-                    </NavLink>
-                </div>
+                @foreach (var item in playlist)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="@("/playlist/"+item.PlaylistId)">
+                            <i class="bi bi-box2-heart me-3" style="font-size: 1.25em"></i>@item.Name
+                        </NavLink>
+                    </div>
+                }
             }
         }
+       
 
     </nav>
 </div>
@@ -43,7 +56,7 @@
     [Inject] private IRepositoryWrapper _repository { get; set; }
     private List<Playlist> playlist;
     private string userId;
-
+    private bool expandSubNav;
 
     protected override async Task OnInitializedAsync()
     {

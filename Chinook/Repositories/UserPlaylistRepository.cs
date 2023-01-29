@@ -47,6 +47,23 @@ namespace Chinook.Repositories
             }
 
         }
+
+        public bool AddTrackToFavouriteList(long trackId, long playListId)
+        {
+            string sql = $"INSERT INTO PlaylistTrack (PlaylistId, TrackId)  VALUES ({playListId}, {trackId});";
+
+            try
+            {
+                _dbContext.Database.ExecuteSqlRaw(sql);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+
+            }
+
+        }
     }
 }
 
