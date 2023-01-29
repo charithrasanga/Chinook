@@ -122,8 +122,9 @@ else
         var track = Playlist.Tracks.FirstOrDefault(t => t.TrackId == trackId);
         var favList = await _repository.UserPlaylists.FindByCondition(x => x.UserId == userId && x.Playlist.Name == "Favorites").Include(y => y.Playlist).FirstAsync();
         var listId = favList.PlaylistId;
-
+        await InvokeAsync(StateHasChanged);
         _repository.UserPlaylists.RemoveTrackFromFavouriteList(trackId, listId);
+
 
       
         InfoMessage = $"Track {track.ArtistName} - {track.AlbumTitle} - {track.TrackName} removed from playlist Favorites.";
