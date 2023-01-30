@@ -25,15 +25,15 @@
 else
 {
     <h1>@Artist.Name</h1>
-        <table class="table table-striped table-hover table-sm">
-            <thead>
-                <tr>
-                    <th>Album title</th>
-                    <th>Track name</th>
-                    <th></th>
+    <table class="table table-striped table-hover table-sm">
+        <thead>
+            <tr>
+                <th>Album title</th>
+                <th>Track name</th>
+                <th></th>
             </tr>
-            </thead>
-            <tbody>
+        </thead>
+        <tbody>
             @foreach (var track in Tracks)
             {
                 <tr>
@@ -52,15 +52,15 @@ else
                     </td>
                 </tr>
             }
-            </tbody>
-        </table>
+        </tbody>
+    </table>
 
 }
 
 @code {
     [Parameter] public long ArtistId { get; set; }
     [CascadingParameter] private Task<AuthenticationState> authenticationState { get; set; }
-    [Inject] IDbContextFactory<ChinookContext> DbFactory { get; set; }
+    [Inject] private IRepositoryWrapper _repository { get; set; }
     private Modal PlaylistDialog { get; set; }
 
     private Artist Artist;
@@ -69,25 +69,39 @@ else
     private PlaylistTrack SelectedTrack;
     private string InfoMessage;
     private string CurrentUserId;
+    private List<Models.Playlist> playlist;
+    private int modelSelectedPlayListId;
+    private string modelNewPlayListName;
+    private bool needToCreateNewPlayList = false;
 
     protected override async Task OnInitializedAsync()
     {
         await InvokeAsync(StateHasChanged);
         CurrentUserId = await GetUserId();
-        var DbContext = await DbFactory.CreateDbContextAsync();
 
-        Artist = DbContext.Artists.SingleOrDefault(a => a.ArtistId == ArtistId);
+        Artist = _repository.Artists.FindByCondition(a => a.ArtistId == ArtistId).SingleOrDefault()!;
 
-        Tracks = DbContext.Tracks.Where(a => a.Album.ArtistId == ArtistId)
-            .Include(a => a.Album)
-            .Select(t => new PlaylistTrack()
-                {
-                    AlbumTitle = (t.Album == null ? "-" : t.Album.Title),
-                    TrackId = t.TrackId,
-                    TrackName = t.Name,
-                    IsFavorite = t.Playlists.Where(p => p.UserPlaylists.Any(up => up.UserId == CurrentUserId && up.Playlist.Name == "Favorites")).Any()
-                })
-            .ToList();
+        Tracks = _repository.Tracks.FindByCondition(t => t.Album.ArtistId == ArtistId)
+        .Include(t => t.Album)
+        .Select(t => new PlaylistTrack()
+            {
+                AlbumTitle = (t.Album == null ? "-" : t.Album.Title),
+                TrackId = t.TrackId,
+                TrackName = t.Name,
+                IsFavorite = t.Playlists.Where(p => p.UserPlaylists.Any(up => up.UserId == CurrentUserId && up.Playlist.Name == "Favorites")).Any()
+            })
+        .ToList();
+
+        playlist = await _repository.UserPlaylists
+        .FindByCondition(p => p.UserId.Equals(CurrentUserId))
+        .Include(p => p.Playlist)
+        .Select(x => new Models.Playlist
+            {
+                Name = x.Playlist.Name,
+                PlaylistId = x.PlaylistId
+            })
+        .ToListAsync();
+
     }
 
     private async Task<string> GetUserId()
@@ -100,6 +114,8 @@ else
     private void FavoriteTrack(long trackId)
     {
         var track = Tracks.FirstOrDefault(t => t.TrackId == trackId);
+
+
         InfoMessage = $"Track {track.ArtistName} - {track.AlbumTitle} - {track.TrackName} added to playlist Favorites.";
     }
 
@@ -118,8 +134,53 @@ else
 
     private void AddTrackToPlaylist()
     {
+        var trackFromDb = _repository.Tracks.FindByCondition(x => x.TrackId == SelectedTrack.TrackId).First();
+        var playlist = new Models.Playlist();
+        var selectedListName = default(string);
+
+        if (needToCreateNewPlayList)
+        {
+            if (string.IsNullOrWhiteSpace(modelNewPlayListName))
+            {
+                CloseInfoMessage();
+                InfoMessage = $"Playlist name must not be empty";
+                PlaylistDialog.Close();
+                return;
+            }
+
+            var maxPlayListId = _repository.Playlists.FindAll().OrderByDescending(x => x.PlaylistId).First().PlaylistId;
+            maxPlayListId++;
+
+            playlist.Name = modelNewPlayListName;
+            playlist.PlaylistId = maxPlayListId;
+            var userPlaylist = new UserPlaylist() { UserId = CurrentUserId, PlaylistId = maxPlayListId };
+            List<UserPlaylist> userPlaylists = new List<UserPlaylist>();
+            userPlaylists.Add(userPlaylist);
+            playlist.UserPlaylists = userPlaylists;
+
+            _repository.Playlists.Create(playlist);
+            _repository.Save();
+
+            playlist = _repository.Playlists.FindByCondition(x => x.PlaylistId == maxPlayListId).First();
+            playlist.Tracks.Add(trackFromDb);
+
+            _repository.Playlists.Update(playlist);
+            selectedListName = modelNewPlayListName;
+
+        }
+        else
+        {
+            playlist = _repository.Playlists.FindByCondition(x => x.PlaylistId == modelSelectedPlayListId).First();
+            playlist.Tracks.Add(trackFromDb);
+            _repository.Playlists.Update(playlist);
+            selectedListName = playlist.Name;
+
+        }
+
+        _repository.Save();
+
         CloseInfoMessage();
-        InfoMessage = $"Track {Artist.Name} - {SelectedTrack.AlbumTitle} - {SelectedTrack.TrackName} added to playlist {{playlist name}}.";
+        InfoMessage = $"Track {Artist.Name} - {SelectedTrack.AlbumTitle} - {SelectedTrack.TrackName} added to playlist {selectedListName}.";
         PlaylistDialog.Close();
     }
 
@@ -128,6 +189,19 @@ else
         InfoMessage = "";
     }
 
+    protected async void SelectedPlaylistChanged(ChangeEventArgs ddlChangedEvent)
+    {
+        modelSelectedPlayListId = Convert.ToInt32(ddlChangedEvent.Value.ToString());
+        needToCreateNewPlayList = false;
+        this.StateHasChanged();
+    }
+
+    protected async void NewPlaylistNameChanged(ChangeEventArgs textChangedEvent)
+    {
+        modelNewPlayListName = textChangedEvent.Value.ToString();
+        needToCreateNewPlayList = true;
+        this.StateHasChanged();
+    }
 
 }
 
@@ -145,15 +219,19 @@ else
 
         <div class="form-group mb-2">
             <label for="ExistingPlaylist">Add to existing playlist</label>
-            <select class="form-control" id="ExistingPlaylist">
-                <option>Playlist 1</option>
-                <option>Playlist 2</option>
-                <option>Playlist 3</option>
+            <select class="form-control" id="ExistingPlaylist" @onchange="SelectedPlaylistChanged">
+                @if (playlist is not null)
+                {
+                    @foreach (var item in playlist)
+                    {
+                        <option value="@item.PlaylistId">@item.Name</option>
+                    }
+                }
             </select>
         </div>
         <div class="form-group mb-2">
             <label for="NewPlaylist">Create new playlist</label>
-            <input type="text" id="NewPlaylist" class="form-control" placeholder="Name for the new playlist">
+            <input @onchange="NewPlaylistNameChanged" type="text" id="NewPlaylist" class="form-control" placeholder="Name for the new playlist">
         </div>
     </Body>
     <Footer>

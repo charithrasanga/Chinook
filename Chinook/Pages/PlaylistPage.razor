@@ -5,7 +5,20 @@
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims;
 
-<h1>Playlist <strong>@Playlist.Name</strong></h1>
+
+<div class="row">
+    <div class="col-8">
+        <h1>Playlist <strong>@Playlist.Name</strong></h1>
+    </div>
+    <div class="col-4">
+        <div class="btn-group  push-right" role="group" aria-label="action-buttons">
+            <button type="button" class="btn btn-outline-warning" @onclick="Rename_Click">Rename Playlist</button>
+            <button type="button" class="btn btn-outline-danger" @onclick="Delete_Click">Delete Playlist</button>
+        </div>
+
+    </div>
+</div>
+
 
 @if (!string.IsNullOrWhiteSpace(InfoMessage))
 {
@@ -58,41 +71,51 @@ else
             }
         </tbody>
     </table>
+
+    <Confirm @ref="DeleteConfirmation" ConfirmationChanged="ConfirmDelete_Click" ConfirmationMessage=@($"Are you sure you want to delete this playlist")></Confirm>
 }
 
 @code {
     [Parameter] public long PlaylistId { get; set; }
     [Inject] IDbContextFactory<ChinookContext> DbFactory { get; set; }
+    [Inject] private IRepositoryWrapper _repository { get; set; }
     [CascadingParameter] private Task<AuthenticationState> authenticationState { get; set; }
+    @inject NavigationManager NavManager
+    private Modal RenamePlaylistDialog { get; set; }
 
     private Chinook.ClientModels.Playlist Playlist;
     private string CurrentUserId;
     private string InfoMessage;
 
-    protected override async Task OnInitializedAsync()
+    protected ConfirmBase DeleteConfirmation { get; set; }
+    private string modelNewPlayListName;
+
+    protected override async Task OnParametersSetAsync()
     {
         CurrentUserId = await GetUserId();
 
         await InvokeAsync(StateHasChanged);
-        var DbContext = await DbFactory.CreateDbContextAsync();
 
-        Playlist = DbContext.Playlists
-            .Include(a => a.Tracks).ThenInclude(a => a.Album).ThenInclude(a => a.Artist)
-            .Where(p => p.PlaylistId == PlaylistId)
-            .Select(p => new ClientModels.Playlist()
-                {
-                    Name = p.Name,
-                    Tracks = p.Tracks.Select(t => new ClientModels.PlaylistTrack()
-                    {
-                        AlbumTitle = t.Album.Title,
-                        ArtistName = t.Album.Artist.Name,
-                        TrackId = t.TrackId,
-                        TrackName = t.Name,
-                        IsFavorite = t.Playlists.Where(p => p.UserPlaylists.Any(up => up.UserId == CurrentUserId && up.Playlist.Name == "Favorites")).Any()
-                    }).ToList()
-                })
-            .FirstOrDefault();
+        Playlist = _repository.Playlists.FindAll()
+           .Include(a => a.Tracks).ThenInclude(a => a.Album).ThenInclude(a => a.Artist)
+           .Where(p => p.PlaylistId == PlaylistId)
+           .Select(p => new ClientModels.Playlist()
+               {
+                   Name = p.Name,
+                   Tracks = p.Tracks.Select(t => new ClientModels.PlaylistTrack()
+                   {
+                       AlbumTitle = t.Album.Title,
+                       ArtistName = t.Album.Artist.Name,
+                       TrackId = t.TrackId,
+                       TrackName = t.Name,
+                       IsFavorite = t.Playlists.Where(p => p.UserPlaylists.Any(up => up.UserId == CurrentUserId && up.Playlist.Name == "Favorites")).Any()
+                   }).ToList()
+               })
+           .FirstOrDefault();
+
+
     }
+
 
     private async Task<string> GetUserId()
     {
@@ -101,15 +124,36 @@ else
         return userId;
     }
 
-    private void FavoriteTrack(long trackId)
+    private async void FavoriteTrack(long trackId)
     {
+        var userId = await GetUserId();
+        await  _repository.UserPlaylists.EnsureUserHasfavoritePlayListAsync(userId);
         var track = Playlist.Tracks.FirstOrDefault(t => t.TrackId == trackId);
+        var favList= await _repository.UserPlaylists.FindByCondition(x => x.UserId == userId && x.Playlist.Name == "Favorites").Include(y=>y.Playlist).FirstAsync();
+        var trackFromDb = _repository.Tracks.FindByCondition(x => x.TrackId == track.TrackId).Include(x=>x.Playlists).First();
+
+        _repository.UserPlaylists.AddTrackToFavouriteList(trackId, favList.PlaylistId);
+
+        //  trackFromDb.Playlists.Add(favList.Playlist);
+        // _repository.Tracks.Update(trackFromDb);
+        //// favList.Playlist.Tracks.Add(trackFromDb);
+        //_repository.UserPlaylists.Update(favList);
+        //  _repository.Save();
         InfoMessage = $"Track {track.ArtistName} - {track.AlbumTitle} - {track.TrackName} added to playlist Favorites.";
+        StateHasChanged();
     }
 
-    private void UnfavoriteTrack(long trackId)
+    private async void UnfavoriteTrack(long trackId)
     {
+        var userId = await GetUserId();
         var track = Playlist.Tracks.FirstOrDefault(t => t.TrackId == trackId);
+        var favList = await _repository.UserPlaylists.FindByCondition(x => x.UserId == userId && x.Playlist.Name == "Favorites").Include(y => y.Playlist).FirstAsync();
+        var listId = favList.PlaylistId;
+        StateHasChanged();
+        _repository.UserPlaylists.RemoveTrackFromFavouriteList(trackId, listId);
+
+
+
         InfoMessage = $"Track {track.ArtistName} - {track.AlbumTitle} - {track.TrackName} removed from playlist Favorites.";
     }
 
@@ -124,4 +168,79 @@ else
         InfoMessage = "";
     }
 
+    protected void Delete_Click()
+    {
+        DeleteConfirmation.Show();
+    }
+
+    protected async Task ConfirmDelete_Click(bool deleteConfirmed)
+    {
+        if (deleteConfirmed)
+        {
+
+            var result= _repository.UserPlaylists.RemovePlaylist(CurrentUserId, PlaylistId);
+
+            CloseInfoMessage();
+            if (result)
+            {
+                InfoMessage = "Playlist has been removed";
+                NavManager.NavigateTo("/");
+            }
+            else
+            {
+                InfoMessage = "Error removing playlist";    
+
+            }
+
+        }
+    }
+
+    protected void Rename_Click()
+    {
+        RenamePlaylistDialog.Open();
+    }
+
+    protected  void NewPlaylistNameChanged(ChangeEventArgs textChangedEvent)
+    {
+        modelNewPlayListName = textChangedEvent.Value.ToString();
+        this.StateHasChanged();
+    }
+
+    private void AddTrackToPlaylist()
+    {
+        if (string.IsNullOrWhiteSpace(modelNewPlayListName))
+        {
+            CloseInfoMessage();
+            InfoMessage = $"Playlist name must not be empty";
+            RenamePlaylistDialog.Close();
+            return;
+        }
+
+        var playListTobeRenamed= _repository.Playlists.FindByCondition(x => x.PlaylistId == PlaylistId).First();
+        playListTobeRenamed.Name = modelNewPlayListName;
+
+        _repository.Playlists.Update(playListTobeRenamed);
+        _repository.Save();
+        RenamePlaylistDialog.Close();
+        CloseInfoMessage();
+        InfoMessage = $"Playlist renamed";
+
+    }
 }
+
+<Modal @ref="RenamePlaylistDialog">
+    <Title>
+        Rename playlist | @Playlist.Name
+    </Title>
+    <Body>
+        
+        <div class="form-group mb-2">
+            <label for="NewPlaylist">Enter new name</label>
+            <input @onchange="NewPlaylistNameChanged" type="text" id="NewPlaylist" value="@Playlist.Name" class="form-control" placeholder="Name for the new playlist">
+        </div>
+    </Body>
+    <Footer>
+        <button class="btn btn-success" @onclick="AddTrackToPlaylist">Save</button>
+    </Footer>
+</Modal>
+
