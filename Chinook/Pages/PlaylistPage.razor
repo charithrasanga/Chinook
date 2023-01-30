@@ -12,7 +12,7 @@
     </div>
     <div class="col-4">
         <div class="btn-group  push-right" role="group" aria-label="action-buttons">
-            <button type="button" class="btn btn-outline-warning">Rename Playlist</button>
+            <button type="button" class="btn btn-outline-warning" @onclick="Rename_Click">Rename Playlist</button>
             <button type="button" class="btn btn-outline-danger" @onclick="Delete_Click">Delete Playlist</button>
         </div>
 
@@ -80,12 +80,15 @@ else
     [Inject] IDbContextFactory<ChinookContext> DbFactory { get; set; }
     [Inject] private IRepositoryWrapper _repository { get; set; }
     [CascadingParameter] private Task<AuthenticationState> authenticationState { get; set; }
+    @inject NavigationManager NavManager
+    private Modal RenamePlaylistDialog { get; set; }
 
     private Chinook.ClientModels.Playlist Playlist;
     private string CurrentUserId;
     private string InfoMessage;
 
     protected ConfirmBase DeleteConfirmation { get; set; }
+    private string modelNewPlayListName;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -174,9 +177,70 @@ else
     {
         if (deleteConfirmed)
         {
-            var playlistToBeDeleted =  _repository.Playlists.FindByCondition(x => x.PlaylistId == PlaylistId).Include(x=>x.Tracks).Include(x=>x.UserPlaylists).First();
-            _repository.Playlists.Delete(playlistToBeDeleted);
-            _repository.Save();
+
+            var result= _repository.UserPlaylists.RemovePlaylist(CurrentUserId, PlaylistId);
+
+            CloseInfoMessage();
+            if (result)
+            {
+                InfoMessage = "Playlist has been removed";
+                NavManager.NavigateTo("/");
+            }
+            else
+            {
+                InfoMessage = "Error removing playlist";    
+
+            }
+
         }
     }
+
+    protected void Rename_Click()
+    {
+        RenamePlaylistDialog.Open();
+    }
+
+    protected  void NewPlaylistNameChanged(ChangeEventArgs textChangedEvent)
+    {
+        modelNewPlayListName = textChangedEvent.Value.ToString();
+        this.StateHasChanged();
+    }
+
+    private void AddTrackToPlaylist()
+    {
+        if (string.IsNullOrWhiteSpace(modelNewPlayListName))
+        {
+            CloseInfoMessage();
+            InfoMessage = $"Playlist name must not be empty";
+            RenamePlaylistDialog.Close();
+            return;
+        }
+
+        var playListTobeRenamed= _repository.Playlists.FindByCondition(x => x.PlaylistId == PlaylistId).First();
+        playListTobeRenamed.Name = modelNewPlayListName;
+
+        _repository.Playlists.Update(playListTobeRenamed);
+        _repository.Save();
+        RenamePlaylistDialog.Close();
+        CloseInfoMessage();
+        InfoMessage = $"Playlist renamed";
+
+    }
 }
+
+<Modal @ref="RenamePlaylistDialog">
+    <Title>
+        Rename playlist | @Playlist.Name
+    </Title>
+    <Body>
+        
+        <div class="form-group mb-2">
+            <label for="NewPlaylist">Enter new name</label>
+            <input @onchange="NewPlaylistNameChanged" type="text" id="NewPlaylist" value="@Playlist.Name" class="form-control" placeholder="Name for the new playlist">
+        </div>
+    </Body>
+    <Footer>
+        <button class="btn btn-success" @onclick="AddTrackToPlaylist">Save</button>
+    </Footer>
+</Modal>
+

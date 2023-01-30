@@ -92,8 +92,6 @@ else
             })
         .ToList();
 
-
-
         playlist = await _repository.UserPlaylists
         .FindByCondition(p => p.UserId.Equals(CurrentUserId))
         .Include(p => p.Playlist)

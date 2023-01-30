@@ -8,6 +8,7 @@ namespace Chinook.Repositories
         Task<Task> EnsureUserHasfavoritePlayListAsync(string userId);
         bool RemoveTrackFromFavouriteList(long trackId, long playListId);
         bool AddTrackToFavouriteList(long trackId, long playListId);
+        bool RemovePlaylist(string userId, long playListId);
     }
 
 }
